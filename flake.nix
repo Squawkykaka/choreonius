@@ -30,6 +30,7 @@
             toolchain.default.override {
               extensions = [
                 "rust-src"
+                "rustc-codegen-cranelift-preview"
               ];
             }
         );
@@ -37,14 +38,39 @@
           cargo = toolchain;
           rustc = toolchain;
         };
+
+        nativeBuildInputs = [
+          pkgs.pkg-config
+        ];
+
+        buildInputs = [
+          pkgs.clang
+          pkgs.mold
+          pkgs.udev
+          pkgs.alsa-lib
+          pkgs.vulkan-loader
+          # x11
+          pkgs.xorg.libX11
+          pkgs.xorg.libXcursor
+          pkgs.xorg.libXi
+          pkgs.xorg.libXrandr
+          pkgs.libxkbcommon
+          # Wayland
+          pkgs.wayland
+          toolchain
+        ];
+
+        all_deps =
+          [
+            pkgs.rust-analyzer
+          ]
+          ++ buildInputs ++ nativeBuildInputs;
       in {
         packages.default = naersk'.buildPackage {
           pname = "siege-week-2";
           src = ./.;
-          buildInputs = [
-            pkgs.openssl
-            pkgs.pkg-config
-          ];
+
+          inherit buildInputs nativeBuildInputs;
         };
 
         devShells.default = pkgs.mkShell {
@@ -52,13 +78,9 @@
           # RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
           RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
 
-          # Extra inputs can be added here; cargo and rustc are provided by default.
-          packages = [
-            pkgs.rust-analyzer
-            pkgs.openssl
-            pkgs.pkg-config
-            toolchain
-          ];
+          nativeBuildInputs = all_deps;
+
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
         };
       }
     );
