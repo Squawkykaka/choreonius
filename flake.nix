@@ -11,28 +11,34 @@
     naersk.url = "github:nix-community/naersk";
   };
 
-  outputs = {
-    nixpkgs,
-    rust-overlay,
-    naersk,
-    flake-utils,
-    ...
-  }:
+  outputs =
+    {
+      nixpkgs,
+      rust-overlay,
+      naersk,
+      flake-utils,
+      ...
+    }:
     flake-utils.lib.eachDefaultSystem (
-      system: let
+      system:
+      let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [(import rust-overlay)];
+          overlays = [ (import rust-overlay) ];
         };
 
         toolchain = pkgs.rust-bin.selectLatestNightlyWith (
           toolchain:
-            toolchain.default.override {
-              extensions = [
-                "rust-src"
-                "rustc-codegen-cranelift-preview"
-              ];
-            }
+          toolchain.default.override {
+            extensions = [
+              "rust-src"
+              "rustc-codegen-cranelift-preview"
+            ];
+            targets = [
+              "x86_64-pc-windows-gnu"
+              "x86_64-unknown-linux-gnu"
+            ];
+          }
         );
         naersk' = pkgs.callPackage naersk {
           cargo = toolchain;
@@ -60,17 +66,38 @@
           toolchain
         ];
 
-        all_deps =
-          [
-            pkgs.rust-analyzer
-          ]
-          ++ buildInputs ++ nativeBuildInputs;
-      in {
-        packages.default = naersk'.buildPackage {
+        all_deps = [
+          pkgs.rust-analyzer
+        ]
+        ++ buildInputs
+        ++ nativeBuildInputs;
+
+        naerskBuildPackage =
+          target: args:
+          naersk'.buildPackage (
+            args // { CARGO_BUILD_TARGET = target; }
+            # // cargoConfig
+          );
+      in
+      {
+        packages.default = naerskBuildPackage "x86_64-unknown-linux-gnu" {
           pname = "siege-week-2";
           src = ./.;
 
           inherit buildInputs nativeBuildInputs;
+        };
+
+        packages.x86_64-pc-windows-gnu = naerskBuildPackage "x86_64-pc-windows-gnu" {
+          src = ./.;
+          doCheck = false;
+          strictDeps = true;
+
+          depsBuildBuild = with pkgs; [
+            pkgsCross.mingwW64.stdenv.cc
+            pkgsCross.mingwW64.windows.pthreads
+          ];
+
+          CARGO_FEATURE_PURE = 1;
         };
 
         devShells.default = pkgs.mkShell {
